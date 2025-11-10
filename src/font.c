@@ -20,9 +20,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "post/error.h"
 #include <stddef.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include <fontconfig/fontconfig.h>
@@ -30,11 +28,9 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 
+#include "post/error.h"
 #include "post/font.h"
 #include "post/string.h"
-
-#include <SDL3/SDL_log.h>
-#include <SDL3/SDL_timer.h>
 
 #define MIN(X, Y) ((X) < (Y) ? (X) : (Y))
 #define MAX(X, Y) ((X) > (Y) ? (X) : (Y))

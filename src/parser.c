@@ -288,6 +288,23 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
   PostAttribute* attribs   = appState->parser.attribs;
   pbool          isPrivate = appState->parser.isPrivate;
 
+#if 0
+  printf("CSI: %c ARGS=", ch);
+  if (attribs != NULL) {
+    PostAttribute* current = attribs->prev;
+    printf("[");
+    do {
+      printf("%u", current->n);
+      current = current->prev;
+      if (current != attribs->prev)
+        printf(", ");
+    } while (current != attribs->prev);
+    printf("]");
+  } else
+    printf("<null>");
+  printf("\n");
+#endif
+
   if (ch == 'A') {
     if (attribs == NULL && cursor->y)
       --cursor->y;

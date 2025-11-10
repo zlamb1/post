@@ -85,7 +85,7 @@ PostSDLAppCreate(PostAppState** appState)
   if (error != POST_ERR_NONE)
     goto fail;
 
-  PostFontSetSize(&renderer->activeFont, 15);
+  PostFontSetSize(&renderer->activeFont, 20);
 
   error = PostSDLSetCellSize(renderer);
 

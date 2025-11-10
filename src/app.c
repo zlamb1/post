@@ -160,8 +160,10 @@ ParserLoop:
       case 0x8:
         if (cursor.x)
           --cursor.x;
-        else if (cursor.y)
+        else if (cursor.y) {
+          cursor.x = appState->grid.width - 1;
           --cursor.y;
+        }
         continue;
       case 0x9:
         for (int i = 0; i < 4; ++i)

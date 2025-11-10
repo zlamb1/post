@@ -109,9 +109,6 @@ PostSDLRenderFrame(PostAppState* appState)
           puint8 alpha = glyphBitmap[y * cellWidth + x];
 
           if (alpha) {
-            SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
-            SDL_RenderPoint(sdlRenderer, rx + x, ry + y);
-
             SDL_SetRenderDrawColor(sdlRenderer,
                                    cell.fg.r,
                                    cell.fg.g,
