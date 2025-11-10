@@ -20,7 +20,9 @@
  * IN THE SOFTWARE.
  */
 
+#include "post/error.h"
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <fontconfig/fontconfig.h>
@@ -141,11 +143,24 @@ PostError
 PostFontSetSize(PostFont* font, puint32 height)
 {
   FT_Face face = font->data;
+  pint32  _height, ascender, descender;
+
   if (FT_Set_Pixel_Sizes(face, 0, height))
     return POST_ERR_NOT_SCALABLE;
+
+  ascender  = face->size->metrics.ascender >> 6;
+  descender = face->size->metrics.descender >> 6;
+  // FIXME: check for signed overflow
+  _height = ascender - descender;
+
+  if (height <= 0)
+    return POST_ERR_BAD_FONT_METRICS;
+
   font->maxAdvance = face->size->metrics.max_advance >> 6;
-  font->height     = face->size->metrics.height >> 6;
-  font->ascender   = face->size->metrics.ascender >> 6;
+  font->height     = _height;
+  font->ascender   = ascender;
+  font->descender  = descender;
+
   return POST_ERR_NONE;
 }
 
@@ -205,16 +220,16 @@ PostFontLoadGlyph(PostFont* font,
   slot    = face->glyph;
   _bitmap = slot->bitmap;
 
-  if (slot->bitmap_left < 0 || height < (puint32) slot->bitmap_top)
-    return POST_ERR_NONE;
-
-  puint32 left = slot->bitmap_left;
-  puint32 top;
+  pint32 left = MAX(slot->bitmap_left, 0);
+  pint32 top;
 
   if (slot->bitmap_top >= 0)
-    top = font->ascender - MIN(font->ascender, (puint32) slot->bitmap_top);
+    top = font->ascender - MIN(font->ascender, slot->bitmap_top);
   else
     top = font->ascender - slot->bitmap_top;
+
+  if (top < 0)
+    top = 0;
 
   puint32 minWidth  = MIN(width, left + _bitmap.width);
   puint32 minHeight = MIN(height, top + _bitmap.rows);

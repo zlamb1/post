@@ -8,7 +8,8 @@ typedef struct PostFont
 {
   char*   path;
   int     numGlyphs;
-  puint32 maxAdvance, height, ascender;
+  puint32 maxAdvance, height;
+  pint32  ascender, descender;
   void*   data;
 } PostFont;
 

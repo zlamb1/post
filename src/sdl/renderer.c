@@ -33,6 +33,7 @@ PostSDLSetCellSize(PostSDLRenderer* renderer)
   PostGlyphMetrics spaceMetrics;
 
   PostTry(PostFontGetGlyphMetrics(&font, 0x20, &spaceMetrics));
+
   renderer->base.cellWidth  = spaceMetrics.horizontalAdvance;
   renderer->base.cellHeight = font.height;
 
@@ -84,26 +85,39 @@ PostSDLRenderFrame(PostAppState* appState)
       if (error != POST_ERR_NONE)
         return error;
 
+      puint32 rx = cx * cellWidth;
+      puint32 ry = cy * cellHeight;
+
       SDL_SetRenderDrawColor(
         sdlRenderer, cell.bg.r, cell.bg.g, cell.bg.b, cell.bg.a);
-      SDL_FRect cellRect = (SDL_FRect) { .x = cx * cellWidth,
-                                         .y = cy * cellHeight,
-                                         .w = cellWidth,
-                                         .h = cellHeight };
+      SDL_FRect cellRect =
+        (SDL_FRect) { .x = rx, .y = ry, .w = cellWidth, .h = cellHeight };
       SDL_RenderFillRect(sdlRenderer, &cellRect);
+
+      if (cell.sgr & POST_CELL_SGR_UNDERLINE) {
+        SDL_SetRenderDrawColor(
+          sdlRenderer, cell.fg.r, cell.fg.g, cell.fg.b, cell.fg.a);
+        SDL_RenderLine(sdlRenderer,
+                       rx,
+                       ry + font.ascender + 2,
+                       rx + cellWidth,
+                       ry + font.ascender + 2);
+      }
 
       for (puint32 y = 0; y < cellHeight; ++y) {
         for (puint32 x = 0; x < cellWidth; ++x) {
           puint8 alpha = glyphBitmap[y * cellWidth + x];
 
           if (alpha) {
+            SDL_SetRenderDrawColor(sdlRenderer, 0, 0, 0, 255);
+            SDL_RenderPoint(sdlRenderer, rx + x, ry + y);
+
             SDL_SetRenderDrawColor(sdlRenderer,
                                    cell.fg.r,
                                    cell.fg.g,
                                    cell.fg.b,
                                    cell.fg.a * (alpha / 255.0));
-            SDL_RenderPoint(
-              sdlRenderer, cx * cellWidth + x, cy * cellHeight + y);
+            SDL_RenderPoint(sdlRenderer, rx + x, ry + y);
           }
         }
       }
