@@ -1,0 +1,7 @@
+option(
+    'render_backend',
+    type : 'combo', 
+    choices : [ 'sdl' ],
+    value : 'sdl',
+    description : 'The render backend to compile support for.',
+)

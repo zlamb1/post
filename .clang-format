@@ -1,0 +1,6 @@
+BasedOnStyle: Mozilla
+IndentWidth: 2
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true
+SpaceAfterCStyleCast: true
