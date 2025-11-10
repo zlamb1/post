@@ -1,5 +1,5 @@
-#ifndef POSTTY_H
-#define POSTTY_H 1
+#ifndef POST_H
+#define POST_H 1
 
 #include "post/app.h"
 #include "post/font.h"
