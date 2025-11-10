@@ -16,6 +16,7 @@ typedef struct PostAppState PostAppState;
 typedef struct PostAttribute
 {
   puint32               n;
+  pbool                 isEmpty;
   struct PostAttribute *prev, *next;
 } PostAttribute;
 

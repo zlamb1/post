@@ -23,7 +23,9 @@
 #include <stdlib.h>
 
 #include "post.h"
+#include "post/compiler.h"
 #include "post/parser.h"
+#include "post/unicode.h"
 
 // match xterm colors
 static PostColor sgrColors[16] = {
@@ -46,198 +48,424 @@ static PostColor sgrColors[16] = {
        current != NULL;                                                        \
        current = current->prev, tmp = (free(tmp), current))
 
-#define PostGetCell(X, Y) appState->grid.cells[(Y) * gwidth + (X)]
+#define PostGetCell(X, Y) appState->grid.cells[(Y) * appState->grid.width + (X)]
 
-static inline void
-PostParseDECSET(PostAppState* appState)
+#define PostGridWidth()  appState->grid.width
+#define PostGridHeight() appState->grid.height
+
+typedef void (*PostIteratorCommand)(PostAppState* appState,
+                                    PostCursor*   cursor,
+                                    puint32       attrib,
+                                    pbool         isEmpty);
+
+typedef void (*PostAggregateCommand)(PostAppState*  appState,
+                                     PostCursor*    cursor,
+                                     PostAttribute* attribs);
+
+#define CreateIteratorCommand(NAME)                                            \
+  static void PostCommand##NAME(UNUSED PostAppState* appState,                 \
+                                UNUSED PostCursor*   cursor,                   \
+                                puint32              attrib,                   \
+                                pbool                isEmpty)
+
+#define CreateAggregateCommand(NAME)                                           \
+  static void PostCommand##NAME(UNUSED PostAppState* appState,                 \
+                                UNUSED PostCursor*   cursor,                   \
+                                PostAttribute*       attribs)
+
+CreateIteratorCommand(ICH)
 {
-  PostAttribute* attribs = appState->parser.attribs;
+  if (isEmpty)
+    attrib = 1;
 
-  if (attribs == NULL)
-    printf("WARNING: expected DECSET value\n");
-  else {
-    PostAttributesIterate(attribs)
-    {
-      switch (current->n) {
-        case 2004:
-          appState->config.bracketed_paste_mode = 1;
-          break;
-        default:
-          printf("WARNING: unknown DECSET value: '%u'\n", current->n);
-          break;
-      }
-    }
-  }
+  if (!attrib)
+    return;
+
+  if (cursor->x + attrib > PostGridWidth())
+    attrib = PostGridWidth() - cursor->x;
+
+  for (puint32 x = PostGridWidth() - 1; x >= cursor->x + attrib; --x)
+    PostGetCell(x, cursor->y) = PostGetCell(x - attrib, cursor->y);
+
+  for (puint32 x = cursor->x; x < cursor->x + attrib; ++x)
+    PostGetCell(x, cursor->y).charCode = 0;
 }
 
-static inline void
-PostParseEL(PostAppState* appState, PostCursor* cursor)
+CreateIteratorCommand(CUU)
 {
-  PostAttribute* attribs = appState->parser.attribs;
+  if (isEmpty)
+    attrib = 1;
+
+  if (attrib >= cursor->y)
+    cursor->y = 0;
+  else
+    cursor->y -= attrib;
+}
+
+CreateIteratorCommand(CUD)
+{
+  if (isEmpty)
+    attrib = 1;
+
+  if ((cursor->y += attrib) >= PostGridHeight())
+    cursor->y = PostGridHeight() - 1;
+}
+
+CreateIteratorCommand(CUF)
+{
+  if (isEmpty)
+    attrib = 1;
+
+  if ((cursor->x += attrib) >= PostGridWidth())
+    cursor->x = PostGridWidth() - 1;
+}
+
+CreateIteratorCommand(CUB)
+{
+  if (isEmpty)
+    attrib = 1;
+
+  if (attrib >= cursor->x)
+    cursor->x = 0;
+  else
+    cursor->x -= attrib;
+}
+
+CreateIteratorCommand(CNL)
+{
+  if (isEmpty)
+    attrib = 1;
+
+  cursor->x = 0;
+  if ((cursor->y += attrib) >= PostGridHeight())
+    cursor->y = PostGridHeight() - 1;
+}
+
+CreateIteratorCommand(CPL)
+{
+  if (isEmpty)
+    attrib = 1;
+
+  cursor->x = 0;
+  if (cursor->y <= attrib)
+    cursor->y = 0;
+  else
+    cursor->y -= attrib;
+}
+
+CreateIteratorCommand(CHA)
+{
+  if (isEmpty)
+    attrib = 1;
+
+  if (attrib >= PostGridWidth())
+    attrib = PostGridWidth() - 1;
+
+  cursor->x = attrib;
+}
+
+CreateAggregateCommand(CUP)
+{
+  PostAttribute* current;
+  puint32        c = 0, x, y;
 
   if (attribs == NULL) {
-    for (puint32 x = cursor->x; x < appState->grid.width; ++x)
-      appState->grid.cells[cursor->y * appState->grid.width + x].charCode = 0;
-  } else {
-    puint32 start, end;
+    cursor->x = 0;
+    cursor->y = 0;
+    return;
+  }
 
-    PostAttributesIterate(attribs)
-    {
-      switch (current->n) {
-        case 0:
-          start = cursor->x;
-          end   = appState->grid.width;
-          break;
-        case 1:
-          start = 0;
-          end   = cursor->x + 1;
-          break;
-        case 2:
-          start = 0;
-          end   = appState->grid.width;
-          break;
-        default:
-          printf("WARNING: Invalid Erase in Line Value: '%u'\n", current->n);
-          continue;
+  current = attribs->prev;
+
+  do {
+    if (c) {
+      if (current->isEmpty)
+        x = 0;
+      else {
+        x = current->n;
+        if (x)
+          --x;
+        if (x >= PostGridWidth())
+          x = PostGridWidth() - 1;
       }
 
-      for (puint32 x = start; x < end; ++x)
-        appState->grid.cells[cursor->y * appState->grid.width + cursor->x]
-          .charCode = 0;
+      cursor->x = x;
+      cursor->y = y;
+
+      c = 0;
+    } else {
+      if (current->isEmpty)
+        y = 0;
+      else {
+        y = current->n;
+        if (y)
+          --y;
+        if (y >= PostGridHeight())
+          y = PostGridHeight() - 1;
+      }
+      ++c;
     }
+
+    current = current->prev;
+  } while (current != attribs->prev);
+
+  if (c) {
+    cursor->x = 0;
+    cursor->y = y;
   }
 }
 
-static inline void
-PostParseSGR(PostAppState* appState, PostCursor* cursor)
+// FIXME!: think about user defined tab stops like with HTS
+CreateIteratorCommand(CHT)
 {
-  PostAttribute* attribs = appState->parser.attribs;
+  puint32 tabWidth = appState->config.tabWidth;
+  if (isEmpty)
+    attrib = 1;
+  // truncate to last tab stop
+  cursor->x = cursor->x / tabWidth * tabWidth;
+  cursor->x += attrib * tabWidth;
+  if (cursor->x >= PostGridWidth())
+    cursor->x = PostGridWidth() - 1;
+}
 
-  if (attribs == NULL) {
-    // NOTE: default to resetting cursor attributes
-    cursor->sgr = 0;
+CreateIteratorCommand(ED)
+{
+  PostCell defaultCell = {
+    .fg = appState->config.fg,
+    .bg = appState->config.bg,
+  };
+
+  if (isEmpty)
+    attrib = 0;
+
+  if (attrib == 0) {
+    for (puint32 x = cursor->x; x < PostGridWidth(); ++x)
+      PostGetCell(x, cursor->y) = defaultCell;
+
+    for (puint32 y = cursor->y + 1; y < PostGridHeight(); ++y)
+      for (puint32 x = 0; x < PostGridWidth(); ++x)
+        PostGetCell(x, y) = defaultCell;
+  } else if (attrib == 1) {
+    for (puint32 y = 0; y < cursor->y; ++y)
+      for (puint32 x = 0; x < PostGridWidth(); ++x)
+        PostGetCell(x, y) = defaultCell;
+
+    for (puint32 x = 0; x < cursor->x; ++x)
+      PostGetCell(x, cursor->y) = defaultCell;
+  } else if (attrib == 2 || attrib == 3) {
+    // FIXME: also clear scrollback buffer on attrib == 3 once we implement
+    // scrollback
+    for (puint32 y = 0; y < PostGridHeight(); ++y)
+      for (puint32 x = 0; x < PostGridWidth(); ++x)
+        PostGetCell(x, y) = defaultCell;
   } else {
-    PostAttributesIterate(attribs)
-    {
-      switch (current->n) {
-        case 0:
-          cursor->fg  = appState->config.fg;
-          cursor->bg  = appState->config.bg;
-          cursor->sgr = 0;
-          break;
-        case 1:
-          cursor->sgr &= ~POST_CELL_SGR_FAINT;
-          cursor->sgr |= POST_CELL_SGR_BOLD;
-          break;
-        case 2:
-          cursor->sgr &= ~POST_CELL_SGR_BOLD;
-          cursor->sgr |= POST_CELL_SGR_FAINT;
-          break;
-        case 3:
-          cursor->sgr |= POST_CELL_SGR_ITALIC;
-          break;
-        case 4:
-          cursor->sgr &= ~POST_CELL_SGR_DBL_UNDERLINE;
-          cursor->sgr |= POST_CELL_SGR_UNDERLINE;
-          break;
-        case 5:
-          cursor->sgr &= ~POST_CELL_SGR_RAPID_BLINK;
-          cursor->sgr |= POST_CELL_SGR_SLOW_BLINK;
-          break;
-        case 6:
-          cursor->sgr &= ~POST_CELL_SGR_SLOW_BLINK;
-          cursor->sgr |= POST_CELL_SGR_RAPID_BLINK;
-          break;
-        case 7:
-          cursor->sgr |= POST_CELL_SGR_INVERT;
-          break;
-        case 8:
-          cursor->sgr |= POST_CELL_SGR_CONCEAL;
-          break;
-        case 9:
-          cursor->sgr |= POST_CELL_SGR_STRIKE;
-          break;
-        case 21:
-          cursor->sgr &= ~POST_CELL_SGR_UNDERLINE;
-          cursor->sgr |= POST_CELL_SGR_DBL_UNDERLINE;
-          break;
-        case 22:
-          cursor->sgr &= ~POST_CELL_SGR_BOLD;
-          cursor->sgr &= ~POST_CELL_SGR_FAINT;
-          break;
-        case 23:
-          cursor->sgr &= ~POST_CELL_SGR_ITALIC;
-          break;
-        case 24:
-          cursor->sgr &= ~POST_CELL_SGR_UNDERLINE;
-          cursor->sgr &= ~POST_CELL_SGR_DBL_UNDERLINE;
-          break;
-        case 25:
-          cursor->sgr &= ~POST_CELL_SGR_SLOW_BLINK;
-          cursor->sgr &= ~POST_CELL_SGR_RAPID_BLINK;
-          break;
-        case 27:
-          cursor->sgr &= ~POST_CELL_SGR_INVERT;
-          break;
-        case 28:
-          cursor->sgr &= ~POST_CELL_SGR_CONCEAL;
-          break;
-        case 29:
-          cursor->sgr &= ~POST_CELL_SGR_STRIKE;
-          break;
-        case 30:
-        case 31:
-        case 32:
-        case 33:
-        case 34:
-        case 35:
-        case 36:
-        case 37:
-          cursor->fg = sgrColors[current->n - 30];
-          break;
-        case 39:
-          cursor->fg = appState->config.fg;
-          break;
-        case 40:
-        case 41:
-        case 42:
-        case 43:
-        case 44:
-        case 45:
-        case 46:
-        case 47:
-          cursor->bg = sgrColors[current->n - 40];
-          break;
-        case 49:
-          cursor->bg = appState->config.bg;
-          break;
-        case 90:
-        case 91:
-        case 92:
-        case 93:
-        case 94:
-        case 95:
-        case 96:
-        case 97:
-          cursor->fg = sgrColors[current->n - 90 + 8];
-          break;
-        case 100:
-        case 101:
-        case 102:
-        case 103:
-        case 104:
-        case 105:
-        case 106:
-        case 107:
-          cursor->bg = sgrColors[current->n - 100 + 8];
-          break;
-        default:
-          printf("WARNING: unkown CSI value: '%u'\n", current->n);
-          break;
-      }
-    }
+    // FIXME: log warning
   }
 }
+
+CreateIteratorCommand(EL)
+{
+  puint32  start, end;
+  PostCell defaultCell = {
+    .fg = appState->config.fg,
+    .bg = appState->config.bg,
+  };
+
+  if (isEmpty)
+    attrib = 0;
+
+  if (attrib == 0) {
+    start = cursor->x;
+    end   = PostGridWidth();
+  } else if (attrib == 1) {
+    start = 0;
+    end   = cursor->x;
+  } else if (attrib == 2) {
+    start = 0;
+    end   = PostGridWidth();
+  } else {
+    // FIXME: log warning
+    return;
+  }
+
+  for (; start < end; ++start)
+    PostGetCell(start, cursor->y) = defaultCell;
+}
+
+CreateIteratorCommand(DECSET)
+{
+  if (isEmpty)
+    // FIXME: log warning
+    return;
+
+  switch (attrib) {
+    case 2004:
+      appState->config.bracketedPasteMode = 1;
+      break;
+    default:
+      // FIXME: log warning
+      break;
+  }
+}
+
+CreateIteratorCommand(DECRST)
+{
+  if (isEmpty)
+    // FIXME: log warning
+    return;
+
+  switch (attrib) {
+    case 2004:
+      appState->config.bracketedPasteMode = 0;
+      break;
+    default:
+      // FIXME: log warning
+      break;
+  }
+}
+
+CreateIteratorCommand(SGR)
+{
+  if (isEmpty)
+    attrib = 0;
+
+  switch (attrib) {
+    case 0:
+      cursor->fg  = appState->config.fg;
+      cursor->bg  = appState->config.bg;
+      cursor->sgr = 0;
+      break;
+    case 1:
+      cursor->sgr &= ~POST_CELL_SGR_FAINT;
+      cursor->sgr |= POST_CELL_SGR_BOLD;
+      break;
+    case 2:
+      cursor->sgr &= ~POST_CELL_SGR_BOLD;
+      cursor->sgr |= POST_CELL_SGR_FAINT;
+      break;
+    case 3:
+      cursor->sgr |= POST_CELL_SGR_ITALIC;
+      break;
+    case 4:
+      cursor->sgr &= ~POST_CELL_SGR_DBL_UNDERLINE;
+      cursor->sgr |= POST_CELL_SGR_UNDERLINE;
+      break;
+    case 5:
+      cursor->sgr &= ~POST_CELL_SGR_RAPID_BLINK;
+      cursor->sgr |= POST_CELL_SGR_SLOW_BLINK;
+      break;
+    case 6:
+      cursor->sgr &= ~POST_CELL_SGR_SLOW_BLINK;
+      cursor->sgr |= POST_CELL_SGR_RAPID_BLINK;
+      break;
+    case 7:
+      cursor->sgr |= POST_CELL_SGR_INVERT;
+      break;
+    case 8:
+      cursor->sgr |= POST_CELL_SGR_CONCEAL;
+      break;
+    case 9:
+      cursor->sgr |= POST_CELL_SGR_STRIKE;
+      break;
+    case 21:
+      cursor->sgr &= ~POST_CELL_SGR_UNDERLINE;
+      cursor->sgr |= POST_CELL_SGR_DBL_UNDERLINE;
+      break;
+    case 22:
+      cursor->sgr &= ~POST_CELL_SGR_BOLD;
+      cursor->sgr &= ~POST_CELL_SGR_FAINT;
+      break;
+    case 23:
+      cursor->sgr &= ~POST_CELL_SGR_ITALIC;
+      break;
+    case 24:
+      cursor->sgr &= ~POST_CELL_SGR_UNDERLINE;
+      cursor->sgr &= ~POST_CELL_SGR_DBL_UNDERLINE;
+      break;
+    case 25:
+      cursor->sgr &= ~POST_CELL_SGR_SLOW_BLINK;
+      cursor->sgr &= ~POST_CELL_SGR_RAPID_BLINK;
+      break;
+    case 27:
+      cursor->sgr &= ~POST_CELL_SGR_INVERT;
+      break;
+    case 28:
+      cursor->sgr &= ~POST_CELL_SGR_CONCEAL;
+      break;
+    case 29:
+      cursor->sgr &= ~POST_CELL_SGR_STRIKE;
+      break;
+    case 30:
+    case 31:
+    case 32:
+    case 33:
+    case 34:
+    case 35:
+    case 36:
+    case 37:
+      cursor->fg = sgrColors[attrib - 30];
+      break;
+    case 39:
+      cursor->fg = appState->config.fg;
+      break;
+    case 40:
+    case 41:
+    case 42:
+    case 43:
+    case 44:
+    case 45:
+    case 46:
+    case 47:
+      cursor->bg = sgrColors[attrib - 40];
+      break;
+    case 49:
+      cursor->bg = appState->config.bg;
+      break;
+    case 90:
+    case 91:
+    case 92:
+    case 93:
+    case 94:
+    case 95:
+    case 96:
+    case 97:
+      cursor->fg = sgrColors[attrib - 90 + 8];
+      break;
+    case 100:
+    case 101:
+    case 102:
+    case 103:
+    case 104:
+    case 105:
+    case 106:
+    case 107:
+      cursor->bg = sgrColors[attrib - 100 + 8];
+      break;
+    default:
+      // FIXME: log warning
+      break;
+  }
+}
+
+static PostIteratorCommand iteratorCommands[128] = {
+  [POST_UNICODE_AT_SIGN] = PostCommandICH, [POST_UNICODE_A] = PostCommandCUU,
+  [POST_UNICODE_B] = PostCommandCUD,       [POST_UNICODE_C] = PostCommandCUF,
+  [POST_UNICODE_D] = PostCommandCUB,       [POST_UNICODE_E] = PostCommandCNL,
+  [POST_UNICODE_F] = PostCommandCPL,       [POST_UNICODE_G] = PostCommandCHA,
+  [POST_UNICODE_I] = PostCommandCHT,       [POST_UNICODE_J] = PostCommandED,
+  [POST_UNICODE_K] = PostCommandEL,        [POST_UNICODE_m] = PostCommandSGR,
+};
+
+static PostIteratorCommand privateIteratorCommands[128] = {
+  [POST_UNICODE_h] = PostCommandDECSET,
+  [POST_UNICODE_l] = PostCommandDECRST,
+};
+
+static PostAggregateCommand aggregateCommands[128] = {
+  [POST_UNICODE_H] = PostCommandCUP,
+};
+
+static PostAggregateCommand privateAggregateCommands[128] = { 0 };
 
 void
 PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
@@ -288,7 +516,7 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
   PostAttribute* attribs   = appState->parser.attribs;
   pbool          isPrivate = appState->parser.isPrivate;
 
-#if 0
+#if 1
   printf("CSI: %c ARGS=", ch);
   if (attribs != NULL) {
     PostAttribute* current = attribs->prev;
@@ -305,57 +533,31 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
   printf("\n");
 #endif
 
-  if (ch == 'A') {
-    if (attribs == NULL && cursor->y)
-      --cursor->y;
+  if (ch >= 0) {
+    PostIteratorCommand iteratorCommand =
+      isPrivate ? privateIteratorCommands[(unsigned) ch]
+                : iteratorCommands[(unsigned) ch];
+    PostAggregateCommand aggregateCommand;
 
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        current->n = 1;
-      if (current->n >= cursor->y)
-        cursor->y = 0;
-      else
-        cursor->y -= current->n;
+    if (iteratorCommand != NULL) {
+      if (attribs == NULL)
+        iteratorCommand(appState, cursor, 0, 1);
+
+      PostAttributesIterate(attribs)
+        iteratorCommand(appState, cursor, current->n, current->isEmpty);
+
+      goto EndCSI;
     }
 
-    goto EndCSI;
-  }
+    aggregateCommand = isPrivate ? privateAggregateCommands[(unsigned) ch]
+                                 : aggregateCommands[(unsigned) ch];
 
-  if (ch == 'B') {
-    if (attribs == NULL) {
-      if (++cursor->y >= gheight)
-        cursor->y = gheight - 1;
+    if (aggregateCommand != NULL) {
+      aggregateCommand(appState, cursor, attribs);
+      // NOTE: free attributes
+      PostAttributesIterate(attribs);
+      goto EndCSI;
     }
-
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        current->n = 1;
-      cursor->y += current->n;
-      if (cursor->y >= gheight)
-        cursor->y = gheight - 1;
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'C') {
-    if (attribs == NULL) {
-      if (++cursor->x >= gwidth)
-        cursor->x = gwidth - 1;
-    }
-
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        current->n = 1;
-      cursor->x += current->n;
-      if (cursor->x >= gwidth)
-        cursor->x = gwidth - 1;
-    }
-
-    goto EndCSI;
   }
 
   if (ch == 'd') {
@@ -373,183 +575,6 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
         cursor->y = gheight - 1;
     }
 
-    goto EndCSI;
-  }
-
-  if (ch == 'D') {
-    if (attribs == NULL && cursor->x)
-      --cursor->x;
-
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        current->n = 1;
-      if (current->n >= cursor->x)
-        cursor->x = 0;
-      else
-        cursor->x -= current->n;
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'E') {
-    if (attribs == NULL) {
-      cursor->x = 0;
-      if (++cursor->y >= gheight)
-        cursor->y = gheight - 1;
-    }
-
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        current->n = 1;
-      cursor->x = 0;
-      cursor->y += current->n;
-      if (cursor->y >= gheight)
-        cursor->y = gheight - 1;
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'F') {
-    if (attribs == NULL) {
-      cursor->x = 0;
-      if (cursor->y)
-        --cursor->y;
-    }
-
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        current->n = 1;
-      cursor->x = 0;
-      if (current->n >= cursor->y)
-        cursor->y = 0;
-      else
-        cursor->y -= current->n;
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'G') {
-    if (attribs == NULL)
-      cursor->x = 0;
-
-    PostAttributesIterate(attribs)
-    {
-      if (current->n)
-        cursor->x = current->n - 1;
-      else
-        cursor->x = 0;
-
-      if (cursor->x >= gwidth)
-        cursor->x = gwidth - 1;
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'h' && isPrivate) {
-    PostParseDECSET(appState);
-    goto EndCSI;
-  }
-
-  if (ch == 'H') {
-    puint32 x = gwidth, y = gheight;
-
-    PostAttributesIterate(attribs)
-    {
-      if (x == gwidth) {
-        x = current->n;
-        if (!x)
-          x = 1;
-        else if (x >= gwidth)
-          x = gwidth - 1;
-      } else if (y == gheight) {
-        y = current->n;
-        if (!y)
-          y = 1;
-        else if (y >= gheight)
-          y = gheight - 1;
-      }
-    }
-
-    if (x == gwidth)
-      x = 1;
-
-    if (y == gheight)
-      y = 1;
-
-    cursor->x = x - 1;
-    cursor->y = y - 1;
-
-    goto EndCSI;
-  }
-
-  if (ch == 'J') {
-    if (attribs == NULL) {
-      /* clear from cursor to end of screen */
-      for (puint32 x = cursor->x; x < gwidth; ++x)
-        PostGetCell(x, cursor->y).charCode = 0;
-      for (puint32 y = cursor->y + 1; y < gheight; ++y)
-        for (puint32 x = 0; x < gwidth; ++x)
-          PostGetCell(x, y).charCode = 0;
-    }
-
-    PostAttributesIterate(attribs)
-    {
-      if (attribs->n == 0) {
-        /* clear from cursor to end of screen */
-        for (puint32 x = cursor->x; x < gwidth; ++x)
-          PostGetCell(x, cursor->y).charCode = 0;
-        for (puint32 y = cursor->y + 1; y < gheight; ++y)
-          for (puint32 x = 0; x < gwidth; ++x)
-            PostGetCell(x, y).charCode = 0;
-      } else if (attribs->n == 1) {
-        for (puint32 y = 0; y < cursor->y; ++y)
-          for (puint32 x = 0; x < gwidth; ++x)
-            PostGetCell(x, y).charCode = 0;
-
-        for (puint32 x = 0; x <= cursor->x; ++x)
-          PostGetCell(x, cursor->y).charCode = 0;
-      } else if (attribs->n == 2 || attribs->n == 3) {
-        // for now, we have no scrollback
-        for (puint32 y = 0; y < gheight; ++y)
-          for (puint32 x = 0; x < gwidth; ++x)
-            PostGetCell(x, y).charCode = 0;
-      } else
-        printf("WARNING: Invalid Erase in Display Value: '%u'\n", attribs->n);
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'K') {
-    PostParseEL(appState, cursor);
-    goto EndCSI;
-  }
-
-  if (ch == 'l' && isPrivate) {
-    PostAttributesIterate(attribs)
-    {
-      switch (current->n) {
-        case 2004:
-          appState->config.bracketed_paste_mode = 0;
-          break;
-        default:
-          printf("WARNING: Unknown DECRST Value: '%u'\n", current->n);
-          break;
-      }
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'm') {
-    PostParseSGR(appState, cursor);
     goto EndCSI;
   }
 

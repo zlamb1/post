@@ -25,7 +25,8 @@
 void
 PostLoadConfig(PostConfig* config)
 {
-  config->fg                   = POST_COLOR_WHITE;
-  config->bg                   = POST_COLOR_BLACK;
-  config->bracketed_paste_mode = 0;
+  config->fg                 = POST_COLOR_WHITE;
+  config->bg                 = POST_COLOR_BLACK;
+  config->tabWidth           = 8;
+  config->bracketedPasteMode = 0;
 }

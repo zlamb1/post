@@ -1,4 +1,34 @@
-#ifndef POST_UNICODE_H
-#define POST_UNICODE_H 1
+#ifndef POST_UNICODE_HDR
+#define POST_UNICODE_HDR 1
+
+#define POST_UNICODE_AT_SIGN 0x40
+
+#define POST_UNICODE_A 0x41
+#define POST_UNICODE_B 0x42
+#define POST_UNICODE_C 0x43
+#define POST_UNICODE_D 0x44
+#define POST_UNICODE_E 0x45
+#define POST_UNICODE_F 0x46
+#define POST_UNICODE_G 0x47
+#define POST_UNICODE_H 0x48
+#define POST_UNICODE_I 0x49
+#define POST_UNICODE_J 0x4A
+#define POST_UNICODE_K 0x4B
+#define POST_UNICODE_L 0x4C
+#define POST_UNICODE_M 0x4D
+
+#define POST_UNICODE_a 0x61
+#define POST_UNICODE_b 0x62
+#define POST_UNICODE_c 0x63
+#define POST_UNICODE_d 0x64
+#define POST_UNICODE_e 0x65
+#define POST_UNICODE_f 0x66
+#define POST_UNICODE_g 0x67
+#define POST_UNICODE_h 0x68
+#define POST_UNICODE_i 0x69
+#define POST_UNICODE_j 0x6A
+#define POST_UNICODE_k 0x6B
+#define POST_UNICODE_l 0x6C
+#define POST_UNICODE_m 0x6D
 
 #endif

@@ -8,7 +8,8 @@ typedef struct
 {
   PostColor fg;
   PostColor bg;
-  pbool     bracketed_paste_mode;
+  puint8    tabWidth;
+  pbool     bracketedPasteMode;
 } PostConfig;
 
 void
