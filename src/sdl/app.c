@@ -147,10 +147,8 @@ fail:
 void
 PostSDLAppDestroy(PostAppState* appState)
 {
-  if (appState->childProcess != NULL) {
-    PostProcessKill(appState->childProcess);
+  if (appState->childProcess != NULL)
     PostProcessDestroy(appState->childProcess);
-  }
 
   if (appState->master != NULL)
     fclose(appState->master);

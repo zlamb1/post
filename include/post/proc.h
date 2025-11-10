@@ -17,9 +17,6 @@ PostError
 PostChildProcessSend(PostAppState* appState, const char* buf, pusize size);
 
 void
-PostProcessKill(PostProcess* proc);
-
-void
 PostProcessDestroy(PostProcess* proc);
 
 #endif

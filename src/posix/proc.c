@@ -22,7 +22,6 @@
 
 #include <poll.h>
 #include <pty.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -153,12 +152,6 @@ PostChildProcessSend(PostAppState* appState, const char* buf, pusize size)
   }
 
   return POST_ERR_NONE;
-}
-
-void
-PostProcessKill(PostProc* proc)
-{
-  kill(proc->pid, SIGINT);
 }
 
 void
