@@ -79,12 +79,6 @@ ParserLoop:
           parser->attribs       = NULL;
           parser->currentAttrib = NULL;
           ++str;
-
-          if (str[0] == POST_UNICODE_QUESTION_MARK) {
-            parser->isPrivate = 1;
-            ++str;
-          }
-
           break;
         case POST_UNICODE_RBRACK:
           parser->state     = POST_PARSER_STATE_OSC;
@@ -106,7 +100,7 @@ ParserLoop:
           parser->state = POST_PARSER_STATE_NORMAL;
           ++str;
           // FIXME: create warn logging function
-          printf("unexpected char after escape: '%c'\n", ch);
+          PostAppLogWarning(appState, "Unknown Escape Sequence: ESC '%c'", ch);
           break;
       }
 
@@ -126,7 +120,8 @@ ParserLoop:
         if (ch == POST_UNICODE_BEL) {
           error = PostStringAppendChar(&parser->t, 0);
           if (error != POST_ERR_NONE)
-            printf("WARNING: OSC Failed: %s\n", PostErrorString(error));
+            PostAppLogWarning(
+              appState, "OSC Failed: '%s'", PostErrorString(error));
           else
             PostAppSetTitle(appState, parser->t.buf);
           PostStringRelease(&parser->t);
@@ -134,13 +129,15 @@ ParserLoop:
         } else {
           error = PostStringAppendChar(&parser->t, ch);
           if (error != POST_ERR_NONE)
-            printf("WARNING: OSC Failed: %s\n", PostErrorString(error));
+            PostAppLogWarning(
+              appState, "OSC Failed: '%s'", PostErrorString(error));
         }
       } else {
         if (parser->s != 255) {
           if (ch != POST_UNICODE_SEMICOLON) {
             parser->state = POST_PARSER_STATE_NORMAL;
-            printf("WARNING: invalid OSC: expected ';' -> got '%c'\n", ch);
+            PostAppLogWarning(
+              appState, "Invalid OSC: Expected ';' But Got '%c'", ch);
             goto ParserLoop;
           }
           parser->parseText = 1;
@@ -156,7 +153,7 @@ ParserLoop:
             break;
           default:
             parser->state = POST_PARSER_STATE_NORMAL;
-            printf("WARNING: invalid OSC: '%c'\n", ch);
+            PostAppLogWarning(appState, "Invalid OSC Command: '%c'", ch);
             break;
         }
       }

@@ -1,13 +1,12 @@
-#include "post/error.h"
 #ifndef POST_APP_H
 #define POST_APP_H 1
 
+#include <stdarg.h>
 #include <stdio.h>
-
-#include <SDL3/SDL.h>
 
 #include "color.h"
 #include "config.h"
+#include "error.h"
 #include "parser.h"
 #include "renderer.h"
 
@@ -57,7 +56,9 @@ typedef struct PostAppState
   PostRenderer* renderer;
   FILE*         master;
   PostProcess*  childProcess;
-  void (*DestroyApp)(struct PostAppState* appState);
+  void (*LogInfo)(struct PostAppState*, const char*, va_list);
+  void (*LogWarning)(struct PostAppState*, const char*, va_list);
+  void (*DestroyApp)(struct PostAppState*);
 } PostAppState;
 
 void
@@ -72,6 +73,28 @@ PostAppSetTitle(PostAppState* appState, const char* title)
   if (appState->renderer == NULL || appState->renderer->SetWindowTitle == NULL)
     return POST_ERR_UNSUPPORTED;
   return appState->renderer->SetWindowTitle(appState, title);
+}
+
+static inline void
+PostAppLogInfo(PostAppState* appState, const char* fmt, ...)
+{
+  if (appState->LogInfo != NULL) {
+    va_list args;
+    va_start(args, fmt);
+    appState->LogInfo(appState, fmt, args);
+    va_end(args);
+  }
+}
+
+static inline void
+PostAppLogWarning(PostAppState* appState, const char* fmt, ...)
+{
+  if (appState->LogWarning != NULL) {
+    va_list args;
+    va_start(args, fmt);
+    appState->LogWarning(appState, fmt, args);
+    va_end(args);
+  }
 }
 
 static inline void

@@ -20,10 +20,12 @@
  * IN THE SOFTWARE.
  */
 
+#include <SDL3/SDL_log.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "post/app.h"
+#include "post/compiler.h"
 #include "post/config.h"
 #include "post/error.h"
 #include "post/font.h"
@@ -58,7 +60,10 @@ PostSDLAppCreate(PostAppState** appState)
   _appState->cursor.fg = _appState->config.fg;
   _appState->cursor.bg = _appState->config.bg;
 
-  _appState->renderer   = (PostRenderer*) renderer;
+  _appState->renderer = (PostRenderer*) renderer;
+
+  _appState->LogInfo    = PostSDLAppLogInfo;
+  _appState->LogWarning = PostSDLAppLogWarning;
   _appState->DestroyApp = PostSDLAppDestroy;
 
   memset(renderer, 0, sizeof(PostSDLRenderer));
@@ -142,6 +147,22 @@ fail:
     free(_appState);
 
   return error;
+}
+
+void
+PostSDLAppLogInfo(UNUSED PostAppState* appState, const char* fmt, va_list args)
+{
+  SDL_LogMessageV(
+    SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
+}
+
+void
+PostSDLAppLogWarning(UNUSED PostAppState* appState,
+                     const char*          fmt,
+                     va_list              args)
+{
+  SDL_LogMessageV(
+    SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_WARN, fmt, args);
 }
 
 void

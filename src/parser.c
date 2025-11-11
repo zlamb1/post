@@ -22,7 +22,8 @@
 
 #include <stdlib.h>
 
-#include "post.h"
+#include "post/app.h"
+#include "post/color.h"
 #include "post/compiler.h"
 #include "post/parser.h"
 #include "post/unicode.h"
@@ -482,6 +483,11 @@ static PostCommand privateCommands[128] = {
 void
 PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
 {
+  if (appState->parser.attribs == NULL && ch == POST_UNICODE_QUESTION_MARK) {
+    appState->parser.isPrivate = 1;
+    return;
+  }
+
   if (ch >= POST_UNICODE_0 && ch <= POST_UNICODE_9) {
     PostAttribute* currentAttrib = appState->parser.currentAttrib;
     PostAttribute* head          = appState->parser.attribs;
@@ -490,7 +496,7 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
       PostAttribute* attrib = malloc(sizeof(PostAttribute));
 
       if (attrib == NULL) {
-        printf("WARNING: out of memory; ignoring CSI attribute\n");
+        PostAppLogWarning(appState, "Ignoring CSI Attribute: Out Of Memory");
         return;
       }
 
@@ -526,20 +532,7 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
   pbool          isPrivate = appState->parser.isPrivate;
 
 #if 0
-  printf("CSI: %c ARGS=", ch);
-  if (attribs != NULL) {
-    PostAttribute* current = attribs->prev;
-    printf("[");
-    do {
-      printf("%u", current->n);
-      current = current->prev;
-      if (current != attribs->prev)
-        printf(", ");
-    } while (current != attribs->prev);
-    printf("]");
-  } else
-    printf("<null>");
-  printf("\n");
+  PostAppLogInfo(appState, "CSI: %c", ch);
 #endif
 
   if (ch >= 0) {
@@ -603,21 +596,8 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
     }
   }
 
-  printf("WARNING: unknown CSI: 'ESC [ %s%c'",
-         appState->parser.isPrivate ? "? " : "",
-         ch);
-
-  if (appState->parser.attribs != NULL) {
-    printf(" ARGS=[");
-    PostAttributesIterate(appState->parser.attribs)
-    {
-      printf("%u", current->n);
-      if (current->prev != NULL)
-        printf(", ");
-    }
-    printf("]\n");
-  } else
-    printf("ARGS: <null>\n");
+  PostAppLogWarning(
+    appState, "Unknown Command Sequence Introducer: ESC[%c", (unsigned) ch, ch);
 
 EndCSI:
   appState->parser.state         = POST_PARSER_STATE_NORMAL;
