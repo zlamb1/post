@@ -29,12 +29,26 @@ PostErrorString(PostError error)
   switch (error) {
     case POST_ERR_NONE:
       return "No Error";
+    case POST_ERR_SUBSYS:
+      return "Subsystem";
     case POST_ERR_NEED_INIT:
       return "System Init Required";
+    case POST_ERR_BAD_ARG:
+      return "Bad Argument";
     case POST_ERR_OUT_OF_MEMORY:
       return "Out Of Memory";
     case POST_ERR_FONT_NOT_FOUND:
       return "Font Not Found";
+    case POST_ERR_NOT_SCALABLE:
+      return "Font Not Scalable";
+    case POST_ERR_RENDER_GLYPH:
+      return "Failed to Render Glyph";
+    case POST_ERR_POSIX:
+      return "Posix Error";
+    case POST_ERR_UNSUPPORTED:
+      return "Unsupported Operation";
+    case POST_ERR_BAD_FONT_METRICS:
+      return "Invalid Font Metrics";
     default:
       return "Unknown Error";
   }

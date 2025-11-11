@@ -38,7 +38,8 @@ typedef struct
 
 typedef struct PostCursor
 {
-  puint8    visible;
+  pbool     visible;
+  pbool     lastColumnFlag;
   puint64   time;
   puint32   x, y;
   PostColor fg, bg;

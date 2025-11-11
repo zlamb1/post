@@ -44,8 +44,14 @@ static void
 PostAppAdvance(PostCellGrid grid, PostCursor* cursor)
 {
   if (++cursor->x == grid.width) {
-    cursor->x = 0;
-    cursor->y = PostAppAdvanceY(grid, cursor->y);
+    if (cursor->lastColumnFlag) {
+      cursor->lastColumnFlag = 0;
+      cursor->x              = 0;
+      cursor->y              = PostAppAdvanceY(grid, cursor->y);
+    } else {
+      cursor->lastColumnFlag = 1;
+      cursor->x              = grid.width - 1;
+    }
   }
 }
 
@@ -90,6 +96,11 @@ ParserLoop:
         case POST_UNICODE_LPAREN:
           parser->state = POST_PARSER_STATE_DESIGNATE_G0;
           ++str;
+          break;
+        case POST_UNICODE_E: // NEL
+          cursor.lastColumnFlag = 0;
+          cursor.x              = 0;
+          cursor.y              = PostAppAdvanceY(appState->grid, cursor.y);
           break;
         default:
           parser->state = POST_PARSER_STATE_NORMAL;
@@ -159,6 +170,7 @@ ParserLoop:
       case POST_UNICODE_BEL:
         continue;
       case POST_UNICODE_BS:
+        cursor.lastColumnFlag = 0;
         if (cursor.x)
           --cursor.x;
         else if (cursor.y) {
@@ -167,23 +179,34 @@ ParserLoop:
         }
         continue;
       case POST_UNICODE_HT:
+        cursor.lastColumnFlag = 0;
         for (int i = 0; i < appState->config.tabWidth; ++i)
           PostAppAdvance(appState->grid, &cursor);
         continue;
       case POST_UNICODE_LF:
       case POST_UNICODE_FF:
-        cursor.x = 0;
-        cursor.y = PostAppAdvanceY(appState->grid, cursor.y);
+        cursor.lastColumnFlag = 0;
+        cursor.x              = 0;
+        cursor.y              = PostAppAdvanceY(appState->grid, cursor.y);
         continue;
       case POST_UNICODE_CR:
-        cursor.x = 0;
+        cursor.lastColumnFlag = 0;
+        cursor.x              = 0;
         continue;
       case POST_UNICODE_ESC:
         parser->state = POST_PARSER_STATE_ESC;
         ++str;
         goto ParserLoop;
+      case POST_UNICODE_SUB:
+        goto ParserLoop;
       default:
         break;
+    }
+
+    if (cursor.lastColumnFlag) {
+      cursor.lastColumnFlag = 0;
+      cursor.x              = 0;
+      cursor.y              = PostAppAdvanceY(appState->grid, cursor.y);
     }
 
     appState->grid.cells[cursor.y * appState->grid.width + cursor.x] =

@@ -53,206 +53,228 @@ static PostColor sgrColors[16] = {
 #define PostGridWidth()  appState->grid.width
 #define PostGridHeight() appState->grid.height
 
-typedef void (*PostIteratorCommand)(PostAppState* appState,
-                                    PostCursor*   cursor,
-                                    puint32       attrib,
-                                    pbool         isEmpty);
+typedef void (*PostCommand1)(PostAppState*, PostCursor*, puint32);
+typedef void (*PostCommand2)(PostAppState*, PostCursor*, puint32, puint32);
 
-typedef void (*PostAggregateCommand)(PostAppState*  appState,
-                                     PostCursor*    cursor,
-                                     PostAttribute* attribs);
-
-#define CreateIteratorCommand(NAME)                                            \
-  static void PostCommand##NAME(UNUSED PostAppState* appState,                 \
-                                UNUSED PostCursor*   cursor,                   \
-                                puint32              attrib,                   \
-                                pbool                isEmpty)
-
-#define CreateAggregateCommand(NAME)                                           \
-  static void PostCommand##NAME(UNUSED PostAppState* appState,                 \
-                                UNUSED PostCursor*   cursor,                   \
-                                PostAttribute*       attribs)
-
-CreateIteratorCommand(ICH)
+typedef struct
 {
-  if (isEmpty)
-    attrib = 1;
+  puint32 defaultValue;
+} PostArg;
 
-  if (!attrib)
-    return;
+typedef struct
+{
+  /**
+   * 1 - accept any args (MUL)
+   * 2 - accept up to one args
+   * 3 - accept up to two args
+   */
+  puint8 type;
 
-  if (cursor->x + attrib > PostGridWidth())
-    attrib = PostGridWidth() - cursor->x;
+  union
+  {
+    struct
+    {
+      PostArg      arg;
+      PostCommand1 command;
+    } one_arg;
+    struct
+    {
+      PostArg      args[2];
+      PostCommand2 command;
+    } two_args;
+  };
+} PostCommand;
 
-  for (puint32 x = PostGridWidth() - 1; x >= cursor->x + attrib; --x)
-    PostGetCell(x, cursor->y) = PostGetCell(x - attrib, cursor->y);
+#define DefinePostCommandMul(NAME) DefinePostCommand1(NAME)
+#define DefinePostCommand1(NAME)                                               \
+  void PostCommand##NAME(                                                      \
+    UNUSED PostAppState* appState, UNUSED PostCursor* cursor, puint32 arg)
+#define DefinePostCommand2(NAME)                                               \
+  void PostCommand##NAME(UNUSED PostAppState* appState,                        \
+                         UNUSED PostCursor*   cursor,                          \
+                         puint32              arg1,                            \
+                         puint32              arg2)
 
-  for (puint32 x = cursor->x; x < cursor->x + attrib; ++x)
+#define PostCommandMulStruct(NAME, DEFAULT_VALUE)                              \
+  {                                                                            \
+    .type = 1, .one_arg = {                                                    \
+      .arg     = { .defaultValue = (DEFAULT_VALUE) },                          \
+      .command = PostCommand##NAME,                                            \
+    }                                                                          \
+  }
+
+#define PostCommand1Struct(NAME, DEFAULT_VALUE)                                \
+  {                                                                            \
+    .type = 2, .one_arg = {                                                    \
+      .arg     = { .defaultValue = (DEFAULT_VALUE) },                          \
+      .command = PostCommand##NAME,                                            \
+    }                                                                          \
+  }
+
+#define PostCommand2Struct(NAME, DEFAULT_VALUE1, DEFAULT_VALUE2)               \
+  {                                                                            \
+    .type = 3, \
+    .two_args = {                                                   \
+      .args    = { \
+          { .defaultValue = (DEFAULT_VALUE1) }, \
+          { .defaultValue = (DEFAULT_VALUE2), }, \
+        }, \
+      .command = PostCommand##NAME, \
+    }                                                               \
+  }
+
+DefinePostCommand1(ICH)
+{
+  if (!arg)
+    arg = 1;
+
+  cursor->lastColumnFlag = 0;
+
+  if (cursor->x + arg > PostGridWidth())
+    arg = PostGridWidth() - cursor->x;
+
+  for (puint32 x = PostGridWidth() - 1; x >= cursor->x + arg; --x)
+    PostGetCell(x, cursor->y) = PostGetCell(x - arg, cursor->y);
+
+  for (puint32 x = cursor->x; x < cursor->x + arg; ++x)
     PostGetCell(x, cursor->y).charCode = 0;
 }
 
-CreateIteratorCommand(CUU)
+DefinePostCommand1(CUU)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
-  if (attrib >= cursor->y)
+  cursor->lastColumnFlag = 0;
+
+  if (arg >= cursor->y)
     cursor->y = 0;
   else
-    cursor->y -= attrib;
+    cursor->y -= arg;
 }
 
-CreateIteratorCommand(CUD)
+DefinePostCommand1(CUD)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
-  if ((cursor->y += attrib) >= PostGridHeight())
+  cursor->lastColumnFlag = 0;
+
+  if ((cursor->y += arg) >= PostGridHeight())
     cursor->y = PostGridHeight() - 1;
 }
 
-CreateIteratorCommand(CUF)
+DefinePostCommand1(CUF)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
-  if ((cursor->x += attrib) >= PostGridWidth())
+  cursor->lastColumnFlag = 0;
+
+  if ((cursor->x += arg) >= PostGridWidth())
     cursor->x = PostGridWidth() - 1;
 }
 
-CreateIteratorCommand(CUB)
+DefinePostCommand1(CUB)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
-  if (attrib >= cursor->x)
+  cursor->lastColumnFlag = 0;
+
+  if (arg >= cursor->x)
     cursor->x = 0;
   else
-    cursor->x -= attrib;
+    cursor->x -= arg;
 }
 
-CreateIteratorCommand(CNL)
+DefinePostCommand1(CNL)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
   cursor->x = 0;
-  if ((cursor->y += attrib) >= PostGridHeight())
+  if ((cursor->y += arg) >= PostGridHeight())
     cursor->y = PostGridHeight() - 1;
 }
 
-CreateIteratorCommand(CPL)
+DefinePostCommand1(CPL)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
   cursor->x = 0;
-  if (cursor->y <= attrib)
+  if (cursor->y <= arg)
     cursor->y = 0;
   else
-    cursor->y -= attrib;
+    cursor->y -= arg;
 }
 
-CreateIteratorCommand(CHA)
+DefinePostCommand1(CHA)
 {
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
 
-  if (attrib >= PostGridWidth())
-    attrib = PostGridWidth() - 1;
+  if (arg >= PostGridWidth())
+    arg = PostGridWidth() - 1;
 
-  cursor->x = attrib;
+  cursor->x = arg;
 }
 
-CreateAggregateCommand(CUP)
+DefinePostCommand2(CUP)
 {
-  PostAttribute* current;
-  puint32        c = 0, x, y;
+  if (!arg1)
+    arg1 = 1;
+  else if (arg1 > PostGridHeight())
+    arg1 = PostGridHeight();
 
-  if (attribs == NULL) {
-    cursor->x = 0;
-    cursor->y = 0;
-    return;
-  }
+  if (!arg2)
+    arg2 = 1;
+  else if (arg2 > PostGridWidth())
+    arg2 = PostGridWidth();
 
-  current = attribs->prev;
-
-  do {
-    if (c) {
-      if (current->isEmpty)
-        x = 0;
-      else {
-        x = current->n;
-        if (x)
-          --x;
-        if (x >= PostGridWidth())
-          x = PostGridWidth() - 1;
-      }
-
-      cursor->x = x;
-      cursor->y = y;
-
-      c = 0;
-    } else {
-      if (current->isEmpty)
-        y = 0;
-      else {
-        y = current->n;
-        if (y)
-          --y;
-        if (y >= PostGridHeight())
-          y = PostGridHeight() - 1;
-      }
-      ++c;
-    }
-
-    current = current->prev;
-  } while (current != attribs->prev);
-
-  if (c) {
-    cursor->x = 0;
-    cursor->y = y;
-  }
+  cursor->lastColumnFlag = 0;
+  cursor->x              = arg2 - 1;
+  cursor->y              = arg1 - 1;
 }
 
 // FIXME!: think about user defined tab stops like with HTS
-CreateIteratorCommand(CHT)
+DefinePostCommand1(CHT)
 {
   puint32 tabWidth = appState->config.tabWidth;
-  if (isEmpty)
-    attrib = 1;
+  if (!arg)
+    arg = 1;
   // truncate to last tab stop
   cursor->x = cursor->x / tabWidth * tabWidth;
-  cursor->x += attrib * tabWidth;
+  cursor->x += arg * tabWidth;
   if (cursor->x >= PostGridWidth())
     cursor->x = PostGridWidth() - 1;
 }
 
-CreateIteratorCommand(ED)
+DefinePostCommand1(ED)
 {
   PostCell defaultCell = {
     .fg = appState->config.fg,
     .bg = appState->config.bg,
   };
 
-  if (isEmpty)
-    attrib = 0;
+  cursor->lastColumnFlag = 0;
 
-  if (attrib == 0) {
+  if (arg == 0) {
     for (puint32 x = cursor->x; x < PostGridWidth(); ++x)
       PostGetCell(x, cursor->y) = defaultCell;
 
     for (puint32 y = cursor->y + 1; y < PostGridHeight(); ++y)
       for (puint32 x = 0; x < PostGridWidth(); ++x)
         PostGetCell(x, y) = defaultCell;
-  } else if (attrib == 1) {
+  } else if (arg == 1) {
     for (puint32 y = 0; y < cursor->y; ++y)
       for (puint32 x = 0; x < PostGridWidth(); ++x)
         PostGetCell(x, y) = defaultCell;
 
     for (puint32 x = 0; x < cursor->x; ++x)
       PostGetCell(x, cursor->y) = defaultCell;
-  } else if (attrib == 2 || attrib == 3) {
+  } else if (arg == 2 || arg == 3) {
     // FIXME: also clear scrollback buffer on attrib == 3 once we implement
     // scrollback
     for (puint32 y = 0; y < PostGridHeight(); ++y)
@@ -263,7 +285,7 @@ CreateIteratorCommand(ED)
   }
 }
 
-CreateIteratorCommand(EL)
+DefinePostCommand1(EL)
 {
   puint32  start, end;
   PostCell defaultCell = {
@@ -271,16 +293,15 @@ CreateIteratorCommand(EL)
     .bg = appState->config.bg,
   };
 
-  if (isEmpty)
-    attrib = 0;
+  cursor->lastColumnFlag = 0;
 
-  if (attrib == 0) {
+  if (arg == 0) {
     start = cursor->x;
     end   = PostGridWidth();
-  } else if (attrib == 1) {
+  } else if (arg == 1) {
     start = 0;
     end   = cursor->x;
-  } else if (attrib == 2) {
+  } else if (arg == 2) {
     start = 0;
     end   = PostGridWidth();
   } else {
@@ -292,13 +313,9 @@ CreateIteratorCommand(EL)
     PostGetCell(start, cursor->y) = defaultCell;
 }
 
-CreateIteratorCommand(DECSET)
+DefinePostCommand1(DECSET)
 {
-  if (isEmpty)
-    // FIXME: log warning
-    return;
-
-  switch (attrib) {
+  switch (arg) {
     case 2004:
       appState->config.bracketedPasteMode = 1;
       break;
@@ -308,13 +325,9 @@ CreateIteratorCommand(DECSET)
   }
 }
 
-CreateIteratorCommand(DECRST)
+DefinePostCommand1(DECRST)
 {
-  if (isEmpty)
-    // FIXME: log warning
-    return;
-
-  switch (attrib) {
+  switch (arg) {
     case 2004:
       appState->config.bracketedPasteMode = 0;
       break;
@@ -324,12 +337,9 @@ CreateIteratorCommand(DECRST)
   }
 }
 
-CreateIteratorCommand(SGR)
+DefinePostCommandMul(SGR)
 {
-  if (isEmpty)
-    attrib = 0;
-
-  switch (attrib) {
+  switch (arg) {
     case 0:
       cursor->fg  = appState->config.fg;
       cursor->bg  = appState->config.bg;
@@ -403,7 +413,7 @@ CreateIteratorCommand(SGR)
     case 35:
     case 36:
     case 37:
-      cursor->fg = sgrColors[attrib - 30];
+      cursor->fg = sgrColors[arg - 30];
       break;
     case 39:
       cursor->fg = appState->config.fg;
@@ -416,7 +426,7 @@ CreateIteratorCommand(SGR)
     case 45:
     case 46:
     case 47:
-      cursor->bg = sgrColors[attrib - 40];
+      cursor->bg = sgrColors[arg - 40];
       break;
     case 49:
       cursor->bg = appState->config.bg;
@@ -429,7 +439,7 @@ CreateIteratorCommand(SGR)
     case 95:
     case 96:
     case 97:
-      cursor->fg = sgrColors[attrib - 90 + 8];
+      cursor->fg = sgrColors[arg - 90 + 8];
       break;
     case 100:
     case 101:
@@ -439,7 +449,7 @@ CreateIteratorCommand(SGR)
     case 105:
     case 106:
     case 107:
-      cursor->bg = sgrColors[attrib - 100 + 8];
+      cursor->bg = sgrColors[arg - 100 + 8];
       break;
     default:
       // FIXME: log warning
@@ -447,25 +457,27 @@ CreateIteratorCommand(SGR)
   }
 }
 
-static PostIteratorCommand iteratorCommands[128] = {
-  [POST_UNICODE_AT_SIGN] = PostCommandICH, [POST_UNICODE_A] = PostCommandCUU,
-  [POST_UNICODE_B] = PostCommandCUD,       [POST_UNICODE_C] = PostCommandCUF,
-  [POST_UNICODE_D] = PostCommandCUB,       [POST_UNICODE_E] = PostCommandCNL,
-  [POST_UNICODE_F] = PostCommandCPL,       [POST_UNICODE_G] = PostCommandCHA,
-  [POST_UNICODE_I] = PostCommandCHT,       [POST_UNICODE_J] = PostCommandED,
-  [POST_UNICODE_K] = PostCommandEL,        [POST_UNICODE_m] = PostCommandSGR,
+static PostCommand commands[128] = {
+  [POST_UNICODE_AT_SIGN] = PostCommand1Struct(ICH, 1),
+  [POST_UNICODE_A]       = PostCommand1Struct(CUU, 1),
+  [POST_UNICODE_B]       = PostCommand1Struct(CUD, 1),
+  [POST_UNICODE_C]       = PostCommand1Struct(CUF, 1),
+  [POST_UNICODE_D]       = PostCommand1Struct(CUB, 1),
+  [POST_UNICODE_E]       = PostCommand1Struct(CNL, 1),
+  [POST_UNICODE_F]       = PostCommand1Struct(CPL, 1),
+  [POST_UNICODE_G]       = PostCommand1Struct(CHA, 1),
+  [POST_UNICODE_H]       = PostCommand2Struct(CUP, 1, 1),
+  [POST_UNICODE_I]       = PostCommand1Struct(CHT, 1),
+  [POST_UNICODE_J]       = PostCommand1Struct(ED, 0),
+  [POST_UNICODE_K]       = PostCommand1Struct(EL, 0),
+  [POST_UNICODE_m]       = PostCommandMulStruct(SGR, 0),
+  // TODO: CUP
 };
 
-static PostIteratorCommand privateIteratorCommands[128] = {
-  [POST_UNICODE_h] = PostCommandDECSET,
-  [POST_UNICODE_l] = PostCommandDECRST,
+static PostCommand privateCommands[128] = {
+  [POST_UNICODE_h] = PostCommand1Struct(DECSET, 0),
+  [POST_UNICODE_l] = PostCommand1Struct(DECRST, 0),
 };
-
-static PostAggregateCommand aggregateCommands[128] = {
-  [POST_UNICODE_H] = PostCommandCUP,
-};
-
-static PostAggregateCommand privateAggregateCommands[128] = { 0 };
 
 void
 PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
@@ -510,9 +522,6 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
     return;
   }
 
-  puint32 gwidth  = appState->grid.width;
-  puint32 gheight = appState->grid.height;
-
   PostAttribute* attribs   = appState->parser.attribs;
   pbool          isPrivate = appState->parser.isPrivate;
 
@@ -534,71 +543,64 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
 #endif
 
   if (ch >= 0) {
-    PostIteratorCommand iteratorCommand =
-      isPrivate ? privateIteratorCommands[(unsigned) ch]
-                : iteratorCommands[(unsigned) ch];
-    PostAggregateCommand aggregateCommand;
+    PostCommand command =
+      isPrivate ? privateCommands[(unsigned) ch] : commands[(unsigned) ch];
 
-    if (iteratorCommand != NULL) {
-      if (attribs == NULL)
-        iteratorCommand(appState, cursor, 0, 1);
+    if (command.type > 0) {
+      if (command.type == 1) {
+        PostAttributesIterate(attribs) command.one_arg.command(
+          appState,
+          cursor,
+          current->isEmpty ? command.one_arg.arg.defaultValue : current->n);
+      } else if (command.type == 2) {
+        if (attribs == NULL) {
+          command.one_arg.command(
+            appState, cursor, command.one_arg.arg.defaultValue);
+          goto EndCSI;
+        }
 
-      PostAttributesIterate(attribs)
-        iteratorCommand(appState, cursor, current->n, current->isEmpty);
+        command.one_arg.command(appState,
+                                cursor,
+                                attribs->prev->isEmpty
+                                  ? command.one_arg.arg.defaultValue
+                                  : attribs->prev->n);
+
+        // NOTE: free attribs
+        PostAttributesIterate(attribs);
+      } else if (command.type == 3) {
+        puint32 c = 0, arg1, arg2;
+
+        if (attribs == NULL) {
+          command.two_args.command(appState,
+                                   cursor,
+                                   command.two_args.args[0].defaultValue,
+                                   command.two_args.args[1].defaultValue);
+          goto EndCSI;
+        }
+
+        PostAttributesIterate(attribs)
+        {
+          if (c++ == 0) {
+            arg1 = current->isEmpty ? command.two_args.args[0].defaultValue
+                                    : current->n;
+          } else {
+            arg2 = current->isEmpty ? command.two_args.args[1].defaultValue
+                                    : current->n;
+            c    = 0;
+            command.two_args.command(appState, cursor, arg1, arg2);
+          }
+        }
+
+        if (c)
+          command.two_args.command(
+            appState, cursor, arg1, command.two_args.args[1].defaultValue);
+      } else {
+        // FIXME: emit warning
+        PostAttributesIterate(attribs);
+      }
 
       goto EndCSI;
     }
-
-    aggregateCommand = isPrivate ? privateAggregateCommands[(unsigned) ch]
-                                 : aggregateCommands[(unsigned) ch];
-
-    if (aggregateCommand != NULL) {
-      aggregateCommand(appState, cursor, attribs);
-      // NOTE: free attributes
-      PostAttributesIterate(attribs);
-      goto EndCSI;
-    }
-  }
-
-  if (ch == 'd') {
-    if (attribs == NULL)
-      cursor->y = 0;
-
-    PostAttributesIterate(attribs)
-    {
-      if (current->n)
-        cursor->y = current->n - 1;
-      else
-        cursor->y = 0;
-
-      if (cursor->y >= gheight)
-        cursor->y = gheight - 1;
-    }
-
-    goto EndCSI;
-  }
-
-  if (ch == 'P') {
-    if (attribs == NULL) {
-      for (puint32 x = cursor->x + 1; x < gwidth; ++x)
-        PostGetCell(x - 1, cursor->y) = PostGetCell(x, cursor->y);
-      PostGetCell(gwidth - 1, cursor->y) = (PostCell) { 0 };
-    }
-
-    puint32 diff = gwidth - cursor->x;
-    PostAttributesIterate(attribs)
-    {
-      if (!current->n)
-        continue;
-      else if (current->n > diff)
-        current->n = diff;
-      for (puint32 x = cursor->x; x < cursor->x + (diff - current->n); ++x)
-        PostGetCell(x, cursor->y) = PostGetCell(x + current->n, cursor->y);
-      for (puint32 x = gwidth - current->n; x < gwidth; ++x)
-        PostGetCell(x, cursor->y) = (PostCell) { 0 };
-    }
-
-    goto EndCSI;
   }
 
   printf("WARNING: unknown CSI: 'ESC [ %s%c'",
