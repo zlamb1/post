@@ -122,13 +122,19 @@ PostSDLRenderFrame(PostAppState* appState)
   }
 
   if (cursor.visible) {
+    puint32 cx = cursor.x, cy = cursor.y;
+    if (cursor.lastColumnFlag && cursor.y + 1 < grid.height) {
+      cx = 0;
+      ++cy;
+    }
+
     SDL_SetRenderDrawColor(
       sdlRenderer, cursor.fg.r, cursor.fg.g, cursor.fg.b, cursor.fg.a);
     SDL_RenderLine(sdlRenderer,
-                   cursor.x * cellWidth,
-                   cursor.y * cellHeight,
-                   cursor.x * cellWidth,
-                   cursor.y * cellHeight + cellHeight);
+                   cx * cellWidth,
+                   cy * cellHeight,
+                   cx * cellWidth,
+                   cy * cellHeight + cellHeight);
   }
 
   SDL_RenderPresent(sdlRenderer);

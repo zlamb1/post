@@ -16,6 +16,9 @@ PostChildProcessPoll(PostAppState* appState);
 PostError
 PostChildProcessSend(PostAppState* appState, const char* buf, pusize size);
 
+PostError
+PostChildProcessSendWindowSize(PostAppState* appState);
+
 void
 PostProcessDestroy(PostProcess* proc);
 

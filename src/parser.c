@@ -281,9 +281,8 @@ DefinePostCommand1(ED)
     for (puint32 y = 0; y < PostGridHeight(); ++y)
       for (puint32 x = 0; x < PostGridWidth(); ++x)
         PostGetCell(x, y) = defaultCell;
-  } else {
-    // FIXME: log warning
-  }
+  } else
+    PostAppLogWarning(appState, "Invalid Erase in Display Argument: %u", arg);
 }
 
 DefinePostCommand1(EL)
@@ -306,7 +305,7 @@ DefinePostCommand1(EL)
     start = 0;
     end   = PostGridWidth();
   } else {
-    // FIXME: log warning
+    PostAppLogWarning(appState, "Invalid Erase in Line Argument: %u", arg);
     return;
   }
 
@@ -321,7 +320,7 @@ DefinePostCommand1(DECSET)
       appState->config.bracketedPasteMode = 1;
       break;
     default:
-      // FIXME: log warning
+      PostAppLogWarning(appState, "Invalid DECSET Argument: %u", arg);
       break;
   }
 }
@@ -333,7 +332,7 @@ DefinePostCommand1(DECRST)
       appState->config.bracketedPasteMode = 0;
       break;
     default:
-      // FIXME: log warning
+      PostAppLogWarning(appState, "Invalid DECRST Argument: %u", arg);
       break;
   }
 }
@@ -453,7 +452,7 @@ DefinePostCommandMul(SGR)
       cursor->bg = sgrColors[arg - 100 + 8];
       break;
     default:
-      // FIXME: log warning
+      PostAppLogWarning(appState, "Invalid SGR Argument: %u", arg);
       break;
   }
 }
@@ -531,7 +530,7 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
   PostAttribute* attribs   = appState->parser.attribs;
   pbool          isPrivate = appState->parser.isPrivate;
 
-#if 0
+#if 1
   PostAppLogInfo(appState, "CSI: %c", ch);
 #endif
 
@@ -588,7 +587,7 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
           command.two_args.command(
             appState, cursor, arg1, command.two_args.args[1].defaultValue);
       } else {
-        // FIXME: emit warning
+        PostAppLogWarning(appState, "Internal Error: Invalid Command Type");
         PostAttributesIterate(attribs);
       }
 

@@ -46,11 +46,6 @@ PostChildProcessSpawn(char* executable, FILE** master, PostProc** childProcess)
   if (_childProcess == NULL)
     return POST_ERR_OUT_OF_MEMORY;
 
-  if (setsid() == -1) {
-    free(_childProcess);
-    return POST_ERR_POSIX;
-  }
-
   if (openpty(&amaster, &aslave, NULL, NULL, NULL)) {
     free(_childProcess);
     return POST_ERR_POSIX;
@@ -103,28 +98,30 @@ PostError
 PostChildProcessPoll(PostAppState* appState)
 {
   int fd = fileno(appState->master);
+  int result;
+
+  char    buf[256];
+  ssize_t bytes;
 
   struct pollfd fds = {
     .fd     = fd,
     .events = POLLIN,
   };
 
-  int result = poll(&fds, 1, 0);
+PollChild:
+  result = poll(&fds, 1, 0);
 
   if (result == 1) {
     if (fds.revents & POLLIN) {
-      char    buf[256];
-      ssize_t bytes;
-
-    ReadBytes:
       bytes = read(fd, buf, 255);
       if (bytes > 0) {
         buf[bytes] = 0x0;
         PostAppWriteASCIIString(appState, buf);
         if (bytes == 255)
-          goto ReadBytes;
+          goto PollChild;
       }
     }
+
     return POST_ERR_NONE;
   } else if (!result)
     return POST_ERR_NONE;
@@ -150,6 +147,22 @@ PostChildProcessSend(PostAppState* appState, const char* buf, pusize size)
       buf += written;
     }
   }
+
+  return POST_ERR_NONE;
+}
+
+PostError
+PostChildProcessSendWindowSize(PostAppState* appState)
+{
+  int fd = fileno(appState->master);
+
+  struct winsize winsize = {
+    .ws_col = appState->grid.width,
+    .ws_row = appState->grid.height,
+  };
+
+  if (ioctl(fd, TIOCSWINSZ, &winsize) == -1)
+    return POST_ERR_POSIX;
 
   return POST_ERR_NONE;
 }

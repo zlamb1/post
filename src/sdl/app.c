@@ -110,6 +110,11 @@ PostSDLAppCreate(PostAppState** appState)
   if (error != POST_ERR_NONE)
     goto fail;
 
+  error = PostChildProcessSendWindowSize(_appState);
+
+  if (error != POST_ERR_NONE)
+    goto fail;
+
   if (!SDL_Init(SDL_INIT_VIDEO)) {
     error = POST_ERR_SUBSYS;
     PostLogErrorA("Could Not Initialize SDL Video: %s", SDL_GetError());

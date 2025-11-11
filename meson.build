@@ -48,7 +48,7 @@ post = executable(
     srcs,
     dependencies : [ sdl_dep3, fontconfig_dep, freetype2_dep ],
     include_directories : [ 'include' ],
-    c_args : [ '-fsanitize=undefined' ],
+    c_args : [ '-g', '-fsanitize=undefined' ],
     link_args : [ '-fsanitize=undefined' ],
 )
 
