@@ -25,6 +25,7 @@
 #include "post.h"
 #include "post/parser.h"
 #include "post/string.h"
+#include "post/unicode.h"
 
 static puint32
 PostAppAdvanceY(PostCellGrid grid, puint32 y)
@@ -66,27 +67,27 @@ ParserLoop:
       break;
     case POST_PARSER_STATE_ESC:
       switch (ch) {
-        case 0x5B: // '['
+        case POST_UNICODE_LBRACK:
           parser->state         = POST_PARSER_STATE_CSI;
           parser->isPrivate     = 0;
           parser->attribs       = NULL;
           parser->currentAttrib = NULL;
           ++str;
 
-          if (str[0] == '?') {
+          if (str[0] == POST_UNICODE_QUESTION_MARK) {
             parser->isPrivate = 1;
             ++str;
           }
 
           break;
-        case 0x5D: // ']'
+        case POST_UNICODE_RBRACK:
           parser->state     = POST_PARSER_STATE_OSC;
           parser->parseText = 0;
           parser->s         = 255;
           parser->t         = (PostString) { 0 };
           ++str;
           break;
-        case 0x28: // '('
+        case POST_UNICODE_LPAREN:
           parser->state = POST_PARSER_STATE_DESIGNATE_G0;
           ++str;
           break;
@@ -111,7 +112,7 @@ ParserLoop:
       if (parser->parseText) {
         PostError error;
 
-        if (ch == 0x7) {
+        if (ch == POST_UNICODE_BEL) {
           error = PostStringAppendChar(&parser->t, 0);
           if (error != POST_ERR_NONE)
             printf("WARNING: OSC Failed: %s\n", PostErrorString(error));
@@ -126,7 +127,7 @@ ParserLoop:
         }
       } else {
         if (parser->s != 255) {
-          if (ch != ';') {
+          if (ch != POST_UNICODE_SEMICOLON) {
             parser->state = POST_PARSER_STATE_NORMAL;
             printf("WARNING: invalid OSC: expected ';' -> got '%c'\n", ch);
             goto ParserLoop;
@@ -137,10 +138,10 @@ ParserLoop:
         }
 
         switch (ch) {
-          case '0':
-          case '1':
-          case '2':
-            parser->s = ch - '0';
+          case POST_UNICODE_0:
+          case POST_UNICODE_1:
+          case POST_UNICODE_2:
+            parser->s = ch - POST_UNICODE_0;
             break;
           default:
             parser->state = POST_PARSER_STATE_NORMAL;
@@ -155,9 +156,9 @@ ParserLoop:
 
   for (; str[0]; ++str) {
     switch (str[0]) {
-      case 0x7:
+      case POST_UNICODE_BEL:
         continue;
-      case 0x8:
+      case POST_UNICODE_BS:
         if (cursor.x)
           --cursor.x;
         else if (cursor.y) {
@@ -165,18 +166,19 @@ ParserLoop:
           --cursor.y;
         }
         continue;
-      case 0x9:
-        for (int i = 0; i < 4; ++i)
+      case POST_UNICODE_HT:
+        for (int i = 0; i < appState->config.tabWidth; ++i)
           PostAppAdvance(appState->grid, &cursor);
         continue;
-      case 0xA:
+      case POST_UNICODE_LF:
+      case POST_UNICODE_FF:
         cursor.x = 0;
         cursor.y = PostAppAdvanceY(appState->grid, cursor.y);
         continue;
-      case 0xD:
+      case POST_UNICODE_CR:
         cursor.x = 0;
         continue;
-      case 0x1B:
+      case POST_UNICODE_ESC:
         parser->state = POST_PARSER_STATE_ESC;
         ++str;
         goto ParserLoop;

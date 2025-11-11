@@ -470,7 +470,7 @@ static PostAggregateCommand privateAggregateCommands[128] = { 0 };
 void
 PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
 {
-  if (ch >= '0' && ch <= '9') {
+  if (ch >= POST_UNICODE_0 && ch <= POST_UNICODE_9) {
     PostAttribute* currentAttrib = appState->parser.currentAttrib;
     PostAttribute* head          = appState->parser.attribs;
 
@@ -501,11 +501,11 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
     }
 
     head->n *= 10;
-    head->n += ch - '0';
+    head->n += ch - POST_UNICODE_0;
     return;
   }
 
-  if (ch == ';') {
+  if (ch == POST_UNICODE_SEMICOLON) {
     appState->parser.currentAttrib = NULL;
     return;
   }
@@ -516,7 +516,7 @@ PostParseCSI(PostAppState* appState, PostCursor* cursor, char ch)
   PostAttribute* attribs   = appState->parser.attribs;
   pbool          isPrivate = appState->parser.isPrivate;
 
-#if 1
+#if 0
   printf("CSI: %c ARGS=", ch);
   if (attribs != NULL) {
     PostAttribute* current = attribs->prev;
