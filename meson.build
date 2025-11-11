@@ -26,6 +26,19 @@ else
     error(f'unsupported render backend: \'@render_backend@\'')
 endif
 
+
+host_system = host_machine.system()
+
+if host_system == 'linux' or \
+   host_system == 'freebsd' or \
+   host_system == 'darwin'
+    srcs += 'src/posix/proc.c'
+    add_project_arguments('-DPOST_POSIX', language : 'c')
+else
+    error(f'unsupported host system: \'@host_system@\'')
+endif
+
+
 sdl_dep3 = dependency('sdl3')
 fontconfig_dep = dependency('fontconfig')
 freetype2_dep = dependency('freetype2')
